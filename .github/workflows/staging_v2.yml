@@ -1,0 +1,58 @@
+name: Staging-v2
+
+on:
+  push:
+    branches:
+      - staging-v2
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        env:
+          BRANCH: ${{ github.head_ref }}
+      - name: Deploying
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.STAGING_V2_HOST }}
+          username: ${{ secrets.STAGING_V2_USERNAME }}
+          key: ${{ secrets.STAGING_V2_KEY }}  
+          envs: BRANCH
+          script: |
+            cd /var/www/admin.staging.ogaranya.com
+            git fetch --all
+            git checkout staging-v2
+            git reset --hard staging-v2
+            git pull origin staging-v2
+            chmod -R 777 storage
+            composer install
+            php artisan migrate
+            php artisan migrate  --path=database/migrations/chats
+            php artisan config:clear
+            php artisan queue:restart
+
+      - name: Slack success notification
+        if: job.status == 'success'
+        uses: rtCamp/action-slack-notify@master
+        env:
+          SLACK_CHANNEL: app
+          SLACK_COLOR: good
+          SLACK_ICON: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
+          SLACK_MESSAGE: "Deployment achieved with success"
+          SLACK_TITLE: CI
+          SLACK_USERNAME: GitHub
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Slack error notification
+        if: job.status == 'failure'
+        uses: rtCamp/action-slack-notify@master
+        env:
+          SLACK_CHANNEL: app
+          SLACK_COLOR: danger
+          SLACK_ICON: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
+          SLACK_MESSAGE: "The deployment has failed @channel"
+          SLACK_TITLE: CI
+          SLACK_USERNAME: GitHub
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}

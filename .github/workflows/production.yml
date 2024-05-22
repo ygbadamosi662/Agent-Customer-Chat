@@ -1,0 +1,56 @@
+name: Production
+
+on:
+  push:
+    branches:
+      - master
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        env:
+          BRANCH: ${{ github.head_ref }}
+      - name: Deploying
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PRODUCTION_V1_HOST }}
+          username: ${{ secrets.PRODUCTION_V1_USERNAME }}
+          key: ${{ secrets.PRODUCTION_V1_KEY }}
+          envs: BRANCH
+          script: |
+            cd /var/www/admin-live.ogaranya.com
+            git fetch --all
+            git checkout master
+            git reset --hard master
+            git pull origin master
+            chmod -R 777 storage
+            composer install
+            php artisan migrate
+            php artisan config:clear
+            php artisan queue:restart
+
+      - name: Slack success notification
+        if: job.status == 'success'
+        uses: rtCamp/action-slack-notify@master
+        env:
+          SLACK_CHANNEL: app
+          SLACK_COLOR: good
+          SLACK_ICON: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
+          SLACK_MESSAGE: "Deployment achieved with success"
+          SLACK_TITLE: CI
+          SLACK_USERNAME: GitHub
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Slack error notification
+        if: job.status == 'failure'
+        uses: rtCamp/action-slack-notify@master
+        env:
+          SLACK_CHANNEL: app
+          SLACK_COLOR: danger
+          SLACK_ICON: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
+          SLACK_MESSAGE: "The deployment has failed @channel"
+          SLACK_TITLE: CI
+          SLACK_USERNAME: GitHub
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
